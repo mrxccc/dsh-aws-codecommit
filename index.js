@@ -288,6 +288,137 @@ function toTimestamp(value) {
   return Number.isNaN(t) ? 0 : t;
 }
 
+/* ------------------------------------------------------------------ */
+/* Line diff (GitHub-style unified hunks)                              */
+/* ------------------------------------------------------------------ */
+
+const MAX_DIFF_LINES = 5000;
+const MAX_DIFF_CELLS = 2_000_000;
+
+function splitLines(text) {
+  return String(text).replace(/\r\n/g, '\n').split('\n');
+}
+
+function computeLineOps(a, b) {
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+  let endA = a.length - 1;
+  let endB = b.length - 1;
+  while (endA >= start && endB >= start && a[endA] === b[endB]) {
+    endA -= 1;
+    endB -= 1;
+  }
+  const ops = [];
+  for (let i = 0; i < start; i += 1) ops.push({ type: 'ctx', text: a[i] });
+  const midA = a.slice(start, endA + 1);
+  const midB = b.slice(start, endB + 1);
+  const n = midA.length;
+  const m = midB.length;
+  if (n === 0) {
+    for (const line of midB) ops.push({ type: 'add', text: line });
+  } else if (m === 0) {
+    for (const line of midA) ops.push({ type: 'del', text: line });
+  } else if (n * m > MAX_DIFF_CELLS) {
+    for (const line of midA) ops.push({ type: 'del', text: line });
+    for (const line of midB) ops.push({ type: 'add', text: line });
+  } else {
+    const width = m + 1;
+    const dp = new Uint32Array((n + 1) * width);
+    for (let i = n - 1; i >= 0; i -= 1) {
+      const row = i * width;
+      const next = (i + 1) * width;
+      for (let j = m - 1; j >= 0; j -= 1) {
+        dp[row + j] = midA[i] === midB[j] ? dp[next + j + 1] + 1 : Math.max(dp[next + j], dp[row + j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (midA[i] === midB[j]) {
+        ops.push({ type: 'ctx', text: midA[i] });
+        i += 1;
+        j += 1;
+      } else if (dp[(i + 1) * width + j] >= dp[i * width + j + 1]) {
+        ops.push({ type: 'del', text: midA[i] });
+        i += 1;
+      } else {
+        ops.push({ type: 'add', text: midB[j] });
+        j += 1;
+      }
+    }
+    while (i < n) { ops.push({ type: 'del', text: midA[i] }); i += 1; }
+    while (j < m) { ops.push({ type: 'add', text: midB[j] }); j += 1; }
+  }
+  for (let i = endA + 1; i < a.length; i += 1) ops.push({ type: 'ctx', text: a[i] });
+  return ops;
+}
+
+function buildHunks(ops, context) {
+  let oldNo = 1;
+  let newNo = 1;
+  const rows = ops.map((op) => {
+    if (op.type === 'ctx') {
+      const row = { type: 'ctx', text: op.text, oldNo, newNo };
+      oldNo += 1;
+      newNo += 1;
+      return row;
+    }
+    if (op.type === 'del') {
+      const row = { type: 'del', text: op.text, oldNo, newNo: null };
+      oldNo += 1;
+      return row;
+    }
+    const row = { type: 'add', text: op.text, oldNo: null, newNo };
+    newNo += 1;
+    return row;
+  });
+  let add = 0;
+  let del = 0;
+  const changeIdx = [];
+  rows.forEach((row, i) => {
+    if (row.type === 'add') add += 1;
+    if (row.type === 'del') del += 1;
+    if (row.type !== 'ctx') changeIdx.push(i);
+  });
+  if (changeIdx.length === 0) return { rows: [], stats: { add, del } };
+  const ranges = [];
+  for (const idx of changeIdx) {
+    const from = Math.max(0, idx - context);
+    const to = Math.min(rows.length - 1, idx + context);
+    const last = ranges[ranges.length - 1];
+    if (last && from <= last.to + 1) last.to = Math.max(last.to, to);
+    else ranges.push({ from, to });
+  }
+  const out = [];
+  let prevTo = -1;
+  for (const range of ranges) {
+    if (range.from > prevTo + 1) out.push({ type: 'gap', count: range.from - prevTo - 1 });
+    for (let i = range.from; i <= range.to; i += 1) out.push(rows[i]);
+    prevTo = range.to;
+  }
+  if (prevTo < rows.length - 1) out.push({ type: 'gap', count: rows.length - 1 - prevTo });
+  return { rows: out, stats: { add, del } };
+}
+
+function buildFileDiff(beforeText, afterText) {
+  const before = beforeText === undefined || beforeText === null ? '' : beforeText;
+  const after = afterText === undefined || afterText === null ? '' : afterText;
+  if (before.includes('\u0000') || after.includes('\u0000')) return { binary: true, stats: { add: 0, del: 0 } };
+  const a = before === '' ? [] : splitLines(before);
+  const b = after === '' ? [] : splitLines(after);
+  if (a.length + b.length > MAX_DIFF_LINES) return { tooLarge: true, stats: { add: b.length, del: a.length } };
+  const ops = computeLineOps(a, b);
+  return buildHunks(ops, 3);
+}
+
+async function getBlobText(profile, repositoryName, blobId) {
+  if (!blobId) return '';
+  const out = await codecommit(profile, 'get-blob', ['--repository-name', repositoryName, '--blob-id', blobId]);
+  const encoded = out && typeof out.content === 'string' ? out.content : '';
+  if (encoded === '') return '';
+  return Buffer.from(encoded, 'base64').toString('utf8');
+}
+
 async function fetchPullRequestSummary(profile, pullRequestId) {
   const { pullRequest } = await codecommit(profile, 'get-pull-request', ['--pull-request-id', pullRequestId]);
   const target = pullRequest?.pullRequestTargets?.[0] ?? {};
@@ -373,6 +504,8 @@ async function fetchPullRequestDetail(profile, repositoryName, pullRequestId) {
   const differencesView = (differences ?? []).map((d) => ({
     changeType: d.changeType,
     path: d.afterBlob?.path ?? d.beforeBlob?.path,
+    beforeBlobId: d.beforeBlob?.blobId,
+    afterBlobId: d.afterBlob?.blobId,
     beforeMode: d.beforeBlob?.mode,
     afterMode: d.afterBlob?.mode,
   }));
@@ -498,6 +631,17 @@ async function handle(request) {
         total: ids.length,
         hasMore: offset + limit < ids.length,
       });
+    }
+
+    if (method === 'GET' && pathname === '/file-diff') {
+      const path = q.get('path') || '';
+      const beforeBlobId = q.get('beforeBlobId') || '';
+      const afterBlobId = q.get('afterBlobId') || '';
+      const [beforeText, afterText] = await Promise.all([
+        beforeBlobId ? getBlobText(profile, repoName, beforeBlobId).catch(() => '') : Promise.resolve(''),
+        afterBlobId ? getBlobText(profile, repoName, afterBlobId).catch(() => '') : Promise.resolve(''),
+      ]);
+      return json({ ok: true, path, diff: buildFileDiff(beforeText, afterText) });
     }
 
     if (method === 'GET' && pathname === '/pull-request') {

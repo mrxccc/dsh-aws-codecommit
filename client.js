@@ -68,6 +68,15 @@ window.__ModuleLoader__.load({
         "pr.overridden": "审批规则已被覆盖",
         "pr.loadMore": "加载更多",
         "pr.needApproval": "需要满足批准条件后才能合并",
+        "pr.filesChangedCount": "{count} 个文件改动",
+        "diff.expandAll": "全部展开",
+        "diff.collapseAll": "全部收起",
+        "diff.binary": "二进制文件，不显示 diff",
+        "diff.tooLarge": "文件过大，未显示 diff",
+        "diff.loadFailed": "diff 加载失败",
+        "diff.retry": "重试",
+        "diff.noChange": "没有内容变化",
+        "diff.gap": "{count} 行未显示",
         "approve": "批准",
         "revoke": "拒绝 / 撤销审批",
         "merge": "合并",
@@ -144,6 +153,15 @@ window.__ModuleLoader__.load({
         "pr.overridden": "Approval rules overridden",
         "pr.loadMore": "Load more",
         "pr.needApproval": "Approval rules must be satisfied before merging",
+        "pr.filesChangedCount": "{count} files changed",
+        "diff.expandAll": "Expand all",
+        "diff.collapseAll": "Collapse all",
+        "diff.binary": "Binary file — diff not shown",
+        "diff.tooLarge": "File too large — diff not shown",
+        "diff.loadFailed": "Failed to load diff",
+        "diff.retry": "Retry",
+        "diff.noChange": "No content changes",
+        "diff.gap": "{count} unchanged lines not shown",
         "approve": "Approve",
         "revoke": "Revoke approval",
         "merge": "Merge",
@@ -312,6 +330,28 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
 .acc-file-tag.A{background:#1a7f37;}
 .acc-file-tag.M{background:#9a6700;}
 .acc-file-tag.D{background:#cf222e;}
+.acc-diff-list{display:flex;flex-direction:column;gap:10px;}
+.acc-diff-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.acc-diff-file{border:1px solid var(--acc-border);border-radius:9px;overflow:hidden;background:var(--acc-panel);}
+.acc-diff-file-head{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;}
+.acc-diff-file-head:hover{background:color-mix(in srgb,var(--acc-brand) 6%,transparent);}
+.acc-diff-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere;flex:1;min-width:0;}
+.acc-diff-stats{margin-left:auto;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;display:flex;gap:8px;flex:none;}
+.acc-stats-del{color:var(--acc-err);}
+.acc-stats-add{color:var(--acc-ok);}
+.acc-diff-chevron{color:var(--acc-faint);font-size:12px;flex:none;}
+.acc-diff-body{overflow-x:auto;border-top:1px solid var(--acc-border);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.55;}
+.acc-diff-row{display:flex;white-space:pre;min-width:max-content;}
+.acc-diff-row.add{background:rgba(63,185,80,.14);}
+.acc-diff-row.del{background:rgba(248,81,73,.14);}
+.acc-diff-ln{width:46px;flex:none;text-align:right;padding:0 8px;color:var(--acc-faint);user-select:none;}
+.acc-diff-mark{width:16px;flex:none;text-align:center;user-select:none;}
+.acc-diff-row.add .acc-diff-mark{color:var(--acc-ok);}
+.acc-diff-row.del .acc-diff-mark{color:var(--acc-err);}
+.acc-diff-text{padding-right:14px;}
+.acc-diff-gap{padding:4px 12px;color:var(--acc-muted);background:color-mix(in srgb,var(--acc-brand) 8%,transparent);font-size:11px;}
+.acc-diff-note{display:flex;align-items:center;gap:10px;padding:10px 14px;color:var(--acc-muted);font-size:12px;flex-wrap:wrap;}
+.acc-diff-note .acc-spinner{width:16px;height:16px;border-width:2px;}
 .acc-approver{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;}
 .acc-notice{border:1px solid var(--acc-border);border-left:3px solid var(--acc-ok);border-radius:8px;padding:8px 11px;font-size:12px;background:color-mix(in srgb,var(--acc-ok) 8%,var(--acc-bg));}
 .acc-notice.err{border-left-color:var(--acc-err);background:color-mix(in srgb,var(--acc-err) 8%,var(--acc-bg));}
@@ -434,6 +474,8 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
       const [prDetailLoading, setPrDetailLoading] = useState(false);
       const [prDetailError, setPrDetailError] = useState(null);
       const [prTab, setPrTab] = useState('conversation');
+      const [openFiles, setOpenFiles] = useState({});
+      const [diffs, setDiffs] = useState({});
 
       const [busy, setBusy] = useState(false);
       const [mergeConfirm, setMergeConfirm] = useState(false);
@@ -530,11 +572,43 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
         let alive = true;
         setPrDetailLoading(true); setPrDetailError(null); setPrDetail(null);
         apiCall('GET', `/pull-request?profile=${encodeURIComponent(profile)}&name=${encodeURIComponent(selectedRepo)}&id=${encodeURIComponent(selectedPr)}`)
-          .then((data) => { if (alive) { setPrDetail(data.pullRequest || null); setPrTab('conversation'); setMergeConfirm(false); } })
+          .then((data) => { if (alive) { setPrDetail(data.pullRequest || null); setPrTab('conversation'); setMergeConfirm(false); setOpenFiles({}); setDiffs({}); } })
           .catch((e) => { if (alive) setPrDetailError(e.message); })
           .finally(() => { if (alive) setPrDetailLoading(false); });
         return () => { alive = false; };
       }, [profile, selectedRepo, selectedPr, refreshTick]);
+
+      /* file diff view for the "Files changed" tab */
+      const loadFileDiff = useCallback(async (file) => {
+        const key = file.path;
+        setDiffs((prev) => ({ ...prev, [key]: { status: 'loading' } }));
+        try {
+          const data = await apiCall('GET', `/file-diff?profile=${encodeURIComponent(profile)}&name=${encodeURIComponent(selectedRepo)}&path=${encodeURIComponent(file.path)}&beforeBlobId=${encodeURIComponent(file.beforeBlobId || '')}&afterBlobId=${encodeURIComponent(file.afterBlobId || '')}`);
+          setDiffs((prev) => ({ ...prev, [key]: { status: 'ready', data: data.diff } }));
+        } catch (e) {
+          setDiffs((prev) => ({ ...prev, [key]: { status: 'error', error: e.message } }));
+        }
+      }, [profile, selectedRepo]);
+
+      useEffect(() => {
+        if (!prDetail || !Array.isArray(prDetail.files)) return;
+        for (const file of prDetail.files) {
+          if (openFiles[file.path] && !diffs[file.path]) loadFileDiff(file);
+        }
+      }, [openFiles, prDetail, diffs, loadFileDiff]);
+
+      const toggleFile = useCallback((file) => {
+        setOpenFiles((prev) => ({ ...prev, [file.path]: !prev[file.path] }));
+      }, []);
+
+      const expandAllFiles = useCallback(() => {
+        if (!prDetail || !Array.isArray(prDetail.files)) return;
+        const all = {};
+        for (const file of prDetail.files) all[file.path] = true;
+        setOpenFiles(all);
+      }, [prDetail]);
+
+      const collapseAllFiles = useCallback(() => setOpenFiles({}), []);
 
       const filteredRepos = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -813,15 +887,7 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
                 ),
               ));
         } else if (prTab === 'files') {
-          mainContent = d.files.length === 0
-            ? h('div', { className: 'acc-empty' }, t('pr.noFiles'))
-            : h('div', { className: 'acc-list' }, d.files.map((f, i) =>
-                h('div', { key: f.path + i, className: 'acc-file-row' },
-                  h('span', { className: `acc-file-tag ${f.changeType}` }, f.changeType),
-                  h('span', { className: 'acc-mono', style: { overflowWrap: 'anywhere' } }, f.path),
-                  h('span', { className: 'acc-faint' }, f.changeType === 'A' ? t('diff.added') : f.changeType === 'D' ? t('diff.deleted') : t('diff.modified')),
-                ),
-              ));
+          mainContent = renderFilesTab(d);
         } else {
           mainContent = h('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
             h('div', null,
@@ -933,6 +999,67 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
             side,
           ),
         );
+      }
+
+      function renderFilesTab(d) {
+        if (!d || !Array.isArray(d.files) || d.files.length === 0) {
+          return h('div', { className: 'acc-empty' }, t('pr.noFiles'));
+        }
+        const anyOpen = d.files.some((f) => openFiles[f.path]);
+        return h('div', { className: 'acc-diff-list' },
+          h('div', { className: 'acc-diff-toolbar' },
+            h('span', { className: 'acc-faint', style: { fontSize: 12 } }, t('pr.filesChangedCount', { count: d.files.length })),
+            h('button', {
+              type: 'button', className: 'acc-btn acc-btn-sm',
+              onClick: () => (anyOpen ? collapseAllFiles() : expandAllFiles()),
+            }, anyOpen ? t('diff.collapseAll') : t('diff.expandAll')),
+          ),
+          d.files.map((f) => {
+            const isOpen = !!openFiles[f.path];
+            const entry = diffs[f.path];
+            return h('section', { key: f.path + f.changeType, className: 'acc-diff-file' },
+              h('div', { className: 'acc-diff-file-head', onClick: () => toggleFile(f) },
+                h('span', { className: `acc-file-tag ${f.changeType}` }, f.changeType),
+                h('span', { className: 'acc-diff-path' }, f.path),
+                entry && entry.status === 'ready' && entry.data && entry.data.stats
+                  ? h('span', { className: 'acc-diff-stats' },
+                      h('span', { className: 'acc-stats-del' }, '−' + entry.data.stats.del),
+                      h('span', { className: 'acc-stats-add' }, '+' + entry.data.stats.add),
+                    )
+                  : null,
+                h('span', { className: 'acc-diff-chevron' }, isOpen ? '▾' : '▸'),
+              ),
+              isOpen ? h('div', { className: 'acc-diff-body' }, renderDiffBody(f, entry)) : null,
+            );
+          }),
+        );
+      }
+
+      function renderDiffBody(f, entry) {
+        if (!entry || entry.status === 'loading') {
+          return h('div', { className: 'acc-diff-note' }, h('span', { className: 'acc-spinner' }), h('span', null, t('loading')));
+        }
+        if (entry.status === 'error') {
+          return h('div', { className: 'acc-diff-note' },
+            h('span', null, t('diff.loadFailed') + (entry.error ? ': ' + entry.error : '')),
+            h('button', { type: 'button', className: 'acc-btn acc-btn-sm', onClick: () => loadFileDiff(f) }, t('diff.retry')),
+          );
+        }
+        const diff = entry.data;
+        if (!diff || diff.binary) return h('div', { className: 'acc-diff-note' }, t('diff.binary'));
+        if (diff.tooLarge) return h('div', { className: 'acc-diff-note' }, t('diff.tooLarge'));
+        if (!diff.rows || diff.rows.length === 0) return h('div', { className: 'acc-diff-note' }, t('diff.noChange'));
+        return h('div', null, diff.rows.map((r, i) => {
+          if (r.type === 'gap') return h('div', { key: 'g' + i, className: 'acc-diff-gap' }, t('diff.gap', { count: r.count }));
+          const rowCls = r.type === 'add' ? 'add' : r.type === 'del' ? 'del' : 'ctx';
+          const mark = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
+          return h('div', { key: i, className: `acc-diff-row ${rowCls}` },
+            h('span', { className: 'acc-diff-ln' }, r.oldNo == null ? '' : String(r.oldNo)),
+            h('span', { className: 'acc-diff-ln' }, r.newNo == null ? '' : String(r.newNo)),
+            h('span', { className: 'acc-diff-mark' }, mark),
+            h('span', { className: 'acc-diff-text' }, r.text === '' ? '\u00a0' : r.text),
+          );
+        }));
       }
 
       return h('div', { className: 'acc-root' }, sidebar, h('div', { className: 'acc-main' }, busyLoading ? h('div', { className: 'acc-progress', 'aria-hidden': true }) : null, topbar, body));
