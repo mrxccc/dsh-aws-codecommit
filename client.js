@@ -66,7 +66,6 @@ window.__ModuleLoader__.load({
         "pr.noCommits": "暂无提交",
         "pr.noFiles": "没有文件改动",
         "pr.overridden": "审批规则已被覆盖",
-        "pr.selfAuthorHint": "不能批准自己提交的 PR（CodeCommit 限制）",
         "pr.loadMore": "加载更多",
         "pr.needApproval": "需要满足批准条件后才能合并",
         "approve": "批准",
@@ -143,7 +142,6 @@ window.__ModuleLoader__.load({
         "pr.noCommits": "No commits",
         "pr.noFiles": "No files changed",
         "pr.overridden": "Approval rules overridden",
-        "pr.selfAuthorHint": "You can't approve your own pull request (CodeCommit restriction)",
         "pr.loadMore": "Load more",
         "pr.needApproval": "Approval rules must be satisfied before merging",
         "approve": "Approve",
@@ -884,13 +882,11 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
             d.overridden ? h('div', { className: 'acc-faint', style: { fontSize: 12 } }, t('pr.overridden')) : null,
             ruleList,
             approverList,
-            !d.isMerged && d.status === 'OPEN'
-              ? d.isAuthor
-                ? h('div', { className: 'acc-faint', style: { fontSize: 12 } }, t('pr.selfAuthorHint'))
-                : h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-                    h('button', { type: 'button', className: 'acc-btn acc-btn-success acc-btn-sm', disabled: busy || d.approved, onClick: () => doApprove('APPROVE') }, t('approve')),
-                    h('button', { type: 'button', className: 'acc-btn acc-btn-danger acc-btn-sm', disabled: busy, onClick: () => doApprove('REVOKE') }, t('revoke')),
-                  )
+            !d.isMerged && d.status === 'OPEN' && !d.isAuthor
+              ? h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
+                  h('button', { type: 'button', className: 'acc-btn acc-btn-success acc-btn-sm', disabled: busy || d.approved, onClick: () => doApprove('APPROVE') }, t('approve')),
+                  h('button', { type: 'button', className: 'acc-btn acc-btn-danger acc-btn-sm', disabled: busy, onClick: () => doApprove('REVOKE') }, t('revoke')),
+                )
               : null,
           ),
           h('div', { className: 'acc-card' },

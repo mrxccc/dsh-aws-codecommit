@@ -53,7 +53,6 @@
   "pr.noCommits": "暂无提交",
   "pr.noFiles": "没有文件改动",
   "pr.overridden": "审批规则已被覆盖",
-  "pr.selfAuthorHint": "不能批准自己提交的 PR（CodeCommit 限制）",
   "pr.loadMore": "加载更多",
   "pr.needApproval": "需要满足批准条件后才能合并",
   "approve": "批准",

@@ -53,7 +53,6 @@
   "pr.noCommits": "No commits",
   "pr.noFiles": "No files changed",
   "pr.overridden": "Approval rules overridden",
-  "pr.selfAuthorHint": "You can't approve your own pull request (CodeCommit restriction)",
   "pr.loadMore": "Load more",
   "pr.needApproval": "Approval rules must be satisfied before merging",
   "approve": "Approve",
