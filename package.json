@@ -1,0 +1,53 @@
+{
+  "name": "dsh-aws-codecommit",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 的 AWS CodeCommit 可视化面板：按 profile 切换环境，浏览仓库 / 分支 / Pull Request，查看 PR 详情并审批、合并。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "aws",
+    "codecommit",
+    "pull-request"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrxccc/dsh-aws-codecommit.git"
+  },
+  "homepage": "https://github.com/mrxccc/dsh-aws-codecommit",
+  "bugs": {
+    "url": "https://github.com/mrxccc/dsh-aws-codecommit/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+# AWS CodeCommit visual panel bundle patch.
+# `name` is the module identifier the Host imports; keep it equal to the npm package name.
+# `id` is the loader config-tree key, matching the plugin's exported name.
+- insert:
+    - id: dsh-aws-codecommit
+      name: 'dsh-aws-codecommit'
+      config: {}
