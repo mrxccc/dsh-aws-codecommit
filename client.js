@@ -545,7 +545,7 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
             if (saved.repoListMode === 'all' || saved.repoListMode === 'favorites') setRepoListMode(saved.repoListMode);
             setHydrated(true);
           })
-          .catch((e) => { if (alive) setProfileError(e.message); });
+          .catch((e) => { if (alive) { setProfileError(e.message); setEnv({ ready: false, awsCli: null }); } });
         return () => { alive = false; };
       }, []);
 
