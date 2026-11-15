@@ -156,6 +156,47 @@ function profileRegion(profileName) {
   return p && p.region ? p.region : undefined;
 }
 
+/* Host readiness probe: is the `aws` CLI actually available on this machine? */
+let awsCliCache = null;
+let awsCliCacheAt = 0;
+function checkAwsCli() {
+  const now = Date.now();
+  if (awsCliCache && now - awsCliCacheAt < 60_000) return Promise.resolve(awsCliCache);
+  return new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+    let child;
+    try {
+      child = spawn('aws', ['--version'], { env: process.env });
+    } catch (error) {
+      const result = { installed: false, error: error instanceof Error ? error.message : String(error) };
+      awsCliCache = result;
+      awsCliCacheAt = now;
+      resolve(result);
+      return;
+    }
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      awsCliCache = result;
+      awsCliCacheAt = now;
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      finish({ installed: true, version: output.trim(), timedOut: true });
+    }, 8_000);
+    if (child.stdout) child.stdout.on('data', (d) => (output += d));
+    if (child.stderr) child.stderr.on('data', (d) => (output += d));
+    child.on('error', (error) => {
+      const code = error && error.code ? error.code : 'ENOENT';
+      finish({ installed: false, error: code });
+    });
+    child.on('close', (code) => finish({ installed: true, version: output.trim(), exitCode: code }));
+  });
+}
+
 /* Current CLI identity per profile (cached briefly). Used to detect a
  * self-authored pull request, which CodeCommit forbids approving. */
 const callerCache = new Map();
@@ -571,7 +612,20 @@ async function handle(request) {
 
   try {
     if (method === 'GET' && pathname === '/profiles') {
-      return json({ ok: true, ...getProfilesCached() });
+      const fresh = q.get('fresh') === '1';
+      if (fresh) {
+        profilesCache = null;
+        awsCliCache = null;
+      }
+      const profilesResult = getProfilesCached();
+      const awsCli = await checkAwsCli();
+      const hasCredentials = profilesResult.profiles.some((p) => p.hasCredentials);
+      return json({
+        ok: true,
+        ...profilesResult,
+        awsCli,
+        ready: awsCli.installed === true && hasCredentials,
+      });
     }
 
     const profile = q.get('profile') || '';

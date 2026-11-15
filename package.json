@@ -1,6 +1,6 @@
 {
   "name": "dsh-aws-codecommit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DeepSeek Harness 的 AWS CodeCommit 可视化面板：按 profile 切换环境，浏览仓库 / 分支 / Pull Request，查看 PR 详情并审批、合并。",
   "type": "module",
   "main": "index.js",

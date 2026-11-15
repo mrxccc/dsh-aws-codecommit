@@ -12,6 +12,8 @@ window.__ModuleLoader__.load({
     const LS_PREFIX = 'dsh-aws-codecommit';
     const LEGACY_LS_PREFIX = 'ds-aws-codecommit';
     const PR_PAGE = 20;
+    const AWS_INSTALL_URL = 'https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html';
+    const AWS_CONFIGURE_URL = 'https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html';
 
     /* ---------------- i18n ---------------- */
     const DICT = {
@@ -77,6 +79,16 @@ window.__ModuleLoader__.load({
         "diff.retry": "重试",
         "diff.noChange": "没有内容变化",
         "diff.gap": "{count} 行未显示",
+        "env.checking": "检测中…",
+        "env.ready": "AWS 环境就绪",
+        "env.notReady": "AWS 未就绪",
+        "env.noCliTitle": "未检测到 AWS CLI",
+        "env.noCliDesc": "请先安装 AWS CLI，并执行 aws configure 配置凭据。",
+        "env.noProfileTitle": "AWS CLI 已安装，但没有可用凭据",
+        "env.noProfileDesc": "请在 ~/.aws/credentials 或通过 aws configure 配置 profile。",
+        "env.openInstall": "前往安装指南",
+        "env.openConfigure": "前往配置指南",
+        "env.recheck": "重新检测",
         "approve": "批准",
         "revoke": "拒绝 / 撤销审批",
         "merge": "合并",
@@ -162,6 +174,16 @@ window.__ModuleLoader__.load({
         "diff.retry": "Retry",
         "diff.noChange": "No content changes",
         "diff.gap": "{count} unchanged lines not shown",
+        "env.checking": "Checking…",
+        "env.ready": "AWS environment ready",
+        "env.notReady": "AWS not ready",
+        "env.noCliTitle": "AWS CLI not found",
+        "env.noCliDesc": "Install the AWS CLI and run aws configure to set up credentials.",
+        "env.noProfileTitle": "AWS CLI found, but no usable credentials",
+        "env.noProfileDesc": "Configure a profile in ~/.aws/credentials or via aws configure.",
+        "env.openInstall": "Installation guide",
+        "env.openConfigure": "Configuration guide",
+        "env.recheck": "Re-check",
         "approve": "Approve",
         "revoke": "Revoke approval",
         "merge": "Merge",
@@ -352,6 +374,17 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
 .acc-diff-gap{padding:4px 12px;color:var(--acc-muted);background:color-mix(in srgb,var(--acc-brand) 8%,transparent);font-size:11px;}
 .acc-diff-note{display:flex;align-items:center;gap:10px;padding:10px 14px;color:var(--acc-muted);font-size:12px;flex-wrap:wrap;}
 .acc-diff-note .acc-spinner{width:16px;height:16px;border-width:2px;}
+.acc-env-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--acc-border);white-space:nowrap;color:var(--acc-muted);}
+.acc-env-chip.ok{color:var(--acc-ok);border-color:color-mix(in srgb,var(--acc-ok) 45%,var(--acc-border));background:color-mix(in srgb,var(--acc-ok) 10%,transparent);}
+.acc-env-chip.err{color:var(--acc-err);border-color:color-mix(in srgb,var(--acc-err) 45%,var(--acc-border));background:color-mix(in srgb,var(--acc-err) 10%,transparent);}
+.acc-env-dot{width:8px;height:8px;border-radius:50%;background:var(--acc-faint);flex:none;}
+.acc-env-chip.ok .acc-env-dot{background:var(--acc-ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc-ok) 22%,transparent);}
+.acc-env-chip.err .acc-env-dot{background:var(--acc-err);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc-err) 22%,transparent);}
+.acc-env-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;margin:12px 16px 0;border:1px solid var(--acc-border);border-left:3px solid var(--acc-err);border-radius:8px;background:color-mix(in srgb,var(--acc-err) 8%,var(--acc-bg));}
+.acc-env-banner .acc-env-dot{background:var(--acc-err);}
+.acc-env-banner-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:200px;font-size:12px;}
+.acc-env-banner-text strong{font-size:13px;color:var(--acc-fg);}
+.acc-env-banner-text span{color:var(--acc-muted);}
 .acc-approver{display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;}
 .acc-notice{border:1px solid var(--acc-border);border-left:3px solid var(--acc-ok);border-radius:8px;padding:8px 11px;font-size:12px;background:color-mix(in srgb,var(--acc-ok) 8%,var(--acc-bg));}
 .acc-notice.err{border-left-color:var(--acc-err);background:color-mix(in srgb,var(--acc-err) 8%,var(--acc-bg));}
@@ -448,6 +481,7 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
       const [profiles, setProfiles] = useState([]);
       const [profile, setProfile] = useState('');
       const [profileError, setProfileError] = useState(null);
+      const [env, setEnv] = useState(null);
 
       const [repos, setRepos] = useState([]);
       const [reposLoading, setReposLoading] = useState(false);
@@ -499,6 +533,7 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
             if (!alive) return;
             const profs = data.profiles || [];
             setProfiles(profs);
+            setEnv({ ready: data.ready === true, awsCli: data.awsCli || null });
             const saved = readLastState();
             const profileToUse = profs.some((p) => p.name === saved.profile) ? saved.profile : (data.defaultProfile || profs[0]?.name || '');
             setProfile(profileToUse);
@@ -512,6 +547,19 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
           })
           .catch((e) => { if (alive) setProfileError(e.message); });
         return () => { alive = false; };
+      }, []);
+
+      /* re-probe the host for the AWS CLI + credentials */
+      const recheckEnv = useCallback(() => {
+        apiCall('GET', '/profiles?fresh=1')
+          .then((data) => {
+            const profs = data.profiles || [];
+            setProfiles(profs);
+            setEnv({ ready: data.ready === true, awsCli: data.awsCli || null });
+            setProfile((prev) => (profs.some((p) => p.name === prev) ? prev : (data.defaultProfile || (profs[0] ? profs[0].name : ''))));
+            setProfileError(null);
+          })
+          .catch((e) => setProfileError(e.message));
       }, []);
 
       /* load favorites for current profile */
@@ -761,11 +809,36 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
           ? renderPRDetail()
           : renderRepoView();
 
+      const envReady = env ? env.ready === true : null;
+      const awsInstalled = env && env.awsCli ? env.awsCli.installed === true : null;
+      const envChip = h('span', { className: `acc-env-chip${envReady === null ? '' : envReady ? ' ok' : ' err'}` },
+        h('span', { className: 'acc-env-dot' }),
+        envReady === null ? t('env.checking') : envReady ? t('env.ready') : t('env.notReady'),
+      );
+
       const topbar = h('div', { className: 'acc-topbar' },
+        envChip,
         h('span', { className: 'acc-grow' }),
         notice ? h('div', { className: `acc-notice${notice.err ? ' err' : ''}` }, notice.msg) : null,
         h('button', { className: 'acc-btn', type: 'button', onClick: () => setRefreshTick((x) => x + 1) }, t('refresh')),
       );
+
+      const envBanner = env && env.ready !== true
+        ? h('div', { className: 'acc-env-banner' },
+            h('span', { className: 'acc-env-dot' }),
+            h('div', { className: 'acc-env-banner-text' },
+              h('strong', null, awsInstalled ? t('env.noProfileTitle') : t('env.noCliTitle')),
+              h('span', null, awsInstalled ? t('env.noProfileDesc') : t('env.noCliDesc')),
+            ),
+            h('a', {
+              className: 'acc-btn acc-btn-sm acc-btn-success',
+              href: awsInstalled ? AWS_CONFIGURE_URL : AWS_INSTALL_URL,
+              target: '_blank',
+              rel: 'noopener noreferrer',
+            }, awsInstalled ? t('env.openConfigure') : t('env.openInstall')),
+            h('button', { type: 'button', className: 'acc-btn acc-btn-sm', onClick: recheckEnv }, t('env.recheck')),
+          )
+        : null;
 
       const busyLoading = reposLoading || branchesLoading || prsLoading || prDetailLoading || prsLoadingMore;
 
@@ -1062,7 +1135,7 @@ color:var(--acc-fg);font-size:14px;line-height:1.5;height:100%;min-height:0;disp
         }));
       }
 
-      return h('div', { className: 'acc-root' }, sidebar, h('div', { className: 'acc-main' }, busyLoading ? h('div', { className: 'acc-progress', 'aria-hidden': true }) : null, topbar, body));
+      return h('div', { className: 'acc-root' }, sidebar, h('div', { className: 'acc-main' }, busyLoading ? h('div', { className: 'acc-progress', 'aria-hidden': true }) : null, topbar, envBanner, body));
     }
 
     /* ---------------- apply ---------------- */
