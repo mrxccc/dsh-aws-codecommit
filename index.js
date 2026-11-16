@@ -14,11 +14,40 @@ const MAX_PAGINATE = 1_000;
 const MAX_COMMITS = 12;
 const MAX_PR_LIST = 100;
 
-const json = (payload, status = 200) =>
-  new Response(JSON.stringify(payload), {
-    status,
-    headers: { 'content-type': 'application/json' },
+function sendJson(res, payload, status = 200) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
   });
+  res.end(body);
+}
+
+function readJson(req) {
+  return new Promise((resolve) => {
+    let raw = '';
+    let done = false;
+    const finish = (value) => {
+      if (done) return;
+      done = true;
+      if (raw === '') return resolve(value);
+      try {
+        resolve(JSON.parse(raw));
+      } catch {
+        resolve(value);
+      }
+    };
+    req.on('data', (chunk) => {
+      raw += chunk;
+      if (raw.length > 2_000_000) {
+        try { req.destroy(); } catch { /* ignore */ }
+        finish({});
+      }
+    });
+    req.on('end', () => finish({}));
+    req.on('error', () => finish({}));
+  });
+}
 
 /* ------------------------------------------------------------------ */
 /* AWS CLI runner                                                      */
@@ -604,11 +633,12 @@ async function fetchPullRequestDetail(profile, repositoryName, pullRequestId) {
 /* Route handler                                                       */
 /* ------------------------------------------------------------------ */
 
-async function handle(request) {
-  const url = new URL(request.url);
-  const method = request.method.toUpperCase();
+async function handle(req, res) {
+  const url = new URL(req.url || '/', 'http://localhost');
+  const method = (req.method || 'GET').toUpperCase();
   const pathname = url.pathname.startsWith(PREFIX) ? url.pathname.slice(PREFIX.length) || '/' : url.pathname;
   const q = url.searchParams;
+  const json = (payload, status = 200) => sendJson(res, payload, status);
 
   try {
     if (method === 'GET' && pathname === '/profiles') {
@@ -706,7 +736,7 @@ async function handle(request) {
     }
 
     if (method === 'POST' && pathname === '/approve') {
-      const body = await request.json().catch(() => ({}));
+      const body = await readJson(req);
       const { pullRequestId, revisionId, action } = body;
       if (!pullRequestId || !revisionId) return json({ ok: false, code: 'NO_PR', message: '缺少 pull request id / revision id' }, 400);
       if (action !== 'APPROVE' && action !== 'REVOKE') return json({ ok: false, code: 'BAD_ACTION', message: 'approval-state 必须是 APPROVE 或 REVOKE' }, 400);
@@ -720,7 +750,7 @@ async function handle(request) {
     }
 
     if (method === 'POST' && pathname === '/merge') {
-      const body = await request.json().catch(() => ({}));
+      const body = await readJson(req);
       const { pullRequestId, mergeType } = body;
       if (!pullRequestId) return json({ ok: false, code: 'NO_PR', message: '缺少 pull request id' }, 400);
       const subcommand = {
@@ -750,7 +780,7 @@ export function apply(ctx) {
   if (!webServer || typeof webServer.register !== 'function') {
     throw new Error('aws-codecommit 需要 webServer 服务');
   }
-  const dispose = webServer.register({ kind: 'prefix', path: PREFIX, resource: handle });
+  const dispose = webServer.register({ kind: 'prefix', path: PREFIX, handler: handle });
   if (typeof ctx.effect === 'function') ctx.effect(() => dispose, 'aws-codecommit:routes');
   else dispose;
 }
